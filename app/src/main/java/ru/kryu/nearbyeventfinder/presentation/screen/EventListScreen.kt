@@ -201,7 +201,7 @@ fun FilterBar(
                 selectedDistance = roundedDistance
                 onDistanceSelected(distance)
             },
-            valueRange = 1f..50f
+            valueRange = 1f..9000f
         )
         Text("Радиус: ${selectedDistance?.toInt() ?: 20} км")
     }
