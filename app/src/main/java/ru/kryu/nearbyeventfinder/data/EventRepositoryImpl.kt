@@ -1,6 +1,8 @@
 package ru.kryu.nearbyeventfinder.data
 
 import android.location.Location
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.flow
 import ru.kryu.nearbyeventfinder.data.converter.toDomain
 import ru.kryu.nearbyeventfinder.data.converter.toEntity
 import ru.kryu.nearbyeventfinder.data.network.EventApi
@@ -15,18 +17,16 @@ class EventRepositoryImpl @Inject constructor(
     private val eventDao: EventDao,
 ) : EventRepository {
 
-    private var cachedEvents: List<Event> = emptyList()
-
-    override suspend fun getEvents(): List<Event> {
-        cachedEvents = try {
+    override fun getEvents(): Flow<List<Event>> = flow {
+        try {
             val url = URL
-            val events = eventApi.getEvents(url).map { it.toDomain() }
-            eventDao.insertEvents(events.map { it.toEntity() })
-            events
+            eventApi.getEvents(url).collect { list ->
+                eventDao.insertEvents(list.map { it.toDomain().toEntity() })
+                emit(list.map { it.toDomain() })
+            }
         } catch (e: Exception) {
-            eventDao.getAllEvents().map { it.toDomain() }
+            emit(eventDao.getAllEvents().map { it.toDomain() })
         }
-        return cachedEvents
     }
 
     override fun filterEvents(
@@ -34,31 +34,34 @@ class EventRepositoryImpl @Inject constructor(
         selectedType: String?,
         maxDistance: Float?,
         currentLocation: Location?
-    ): List<Event> {
-        return cachedEvents.filter { event ->
-            // Фильтр по дате
-            val isDateMatch = selectedDate?.let {
-                val eventDate = LocalDate.parse(event.date.substringBefore("T"))
-                eventDate == it
-            } ?: true
-
-            // Фильтр по типу
-            val isTypeMatch = selectedType?.let { type ->
-                event.type.equals(type, ignoreCase = true)
-            } ?: true
-
-            // Фильтр по расстоянию
-            val isDistanceMatch = maxDistance?.let { distance ->
-                currentLocation?.let { location ->
-                    val eventLocation = Location("").apply {
-                        latitude = event.location.lat
-                        longitude = event.location.lng
-                    }
-                    location.distanceTo(eventLocation) / 1000 <= distance
+    ): Flow<List<Event>> = flow {
+        getEvents().collect { events ->
+            val filteredEvents = events.filter { event ->
+                // Фильтр по дате
+                val isDateMatch = selectedDate?.let {
+                    val eventDate = LocalDate.parse(event.date.substringBefore("T"))
+                    eventDate == it
                 } ?: true
-            } ?: true
 
-            isDateMatch && isTypeMatch && isDistanceMatch
+                // Фильтр по типу
+                val isTypeMatch = selectedType?.let { type ->
+                    event.type.equals(type, ignoreCase = true)
+                } ?: true
+
+                // Фильтр по расстоянию
+                val isDistanceMatch = maxDistance?.let { distance ->
+                    currentLocation?.let { location ->
+                        val eventLocation = Location("").apply {
+                            latitude = event.location.lat
+                            longitude = event.location.lng
+                        }
+                        location.distanceTo(eventLocation) / 1000 <= distance
+                    } ?: true
+                } ?: true
+
+                isDateMatch && isTypeMatch && isDistanceMatch
+            }
+            emit(filteredEvents)
         }
     }
 

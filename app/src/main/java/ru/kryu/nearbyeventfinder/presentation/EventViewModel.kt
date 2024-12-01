@@ -27,8 +27,9 @@ class EventViewModel @Inject constructor(
     private fun fetchEvents() {
         viewModelScope.launch {
             _state.value = _state.value.copy(isLoading = true)
-            val events = repository.getEvents()
-            _state.value = _state.value.copy(events = events, isLoading = false)
+            repository.getEvents().collect {
+                _state.value = _state.value.copy(events = it, isLoading = false)
+            }
         }
     }
 
@@ -44,8 +45,10 @@ class EventViewModel @Inject constructor(
         currentLocation: Location? = null
     ) {
         viewModelScope.launch {
-            val filtered = repository.filterEvents(selectedDate, selectedType, maxDistance, currentLocation)
-            _state.value = _state.value.copy(filteredEvents = filtered)
+            repository.filterEvents(selectedDate, selectedType, maxDistance, currentLocation)
+                .collect {
+                    _state.value = _state.value.copy(filteredEvents = it)
+                }
         }
     }
 }
